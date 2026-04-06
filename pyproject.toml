@@ -3,7 +3,7 @@ name = "curbench"
 version = "1.0.0"
 description = "Curriculum Learning Benchmark"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11,<3.13"
 dependencies = [
   "numpy>=1.26",
   "pillow>=10.0",
@@ -17,13 +17,26 @@ dependencies = [
   "scipy>=1.11",
   "scikit-learn>=1.4",
   "matplotlib>=3.8",
+  "torch==2.4.0",
+  "torchvision==0.19.0",
+  "torchaudio==2.4.0",
   "torchmetrics>=1.4",
-  "torch-geometric>=2.7.0",
+  "torch-geometric==2.7.0",
 ]
 
 [tool.uv.build-backend]
 module-name = "curbench"
 module-root = ""
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu121" }
+torchvision = { index = "pytorch-cu121" }
+torchaudio = { index = "pytorch-cu121" }
 
 [build-system]
 requires = ["uv_build>=0.8.5,<0.9.0"]
