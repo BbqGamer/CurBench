@@ -6,10 +6,10 @@ methods = ['base']
 # datasets = ['cifar100', 'tinyimagenet', 'animal10n']
 datasets = ['cifar100']
 # models = ['lenet', 'resnet18', 'vit']
-models = ['resnet18']
+models = ['resnet18', 'vit']
 settings = ['', '-noise-0.4', '-imbalance-50']
 seeds = [42]
-epoch = 1
+epoch = 200
 gpu = 0
 for setting in settings:
     for dataset in datasets:
