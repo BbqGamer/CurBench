@@ -1,17 +1,36 @@
 import os
 import time
+
 import torch
 from tqdm import tqdm
 
-from ..datasets.vision import get_dataset
 from ..backbones.vision import get_net
-from ..utils import set_random, create_log_dir, get_logger, init_wandb, log_wandb, finish_wandb
+from ..datasets.vision import get_dataset
+from ..utils import (
+    create_log_dir,
+    finish_wandb,
+    get_logger,
+    init_wandb,
+    log_wandb,
+    set_random,
+)
 
 
-
-class ImageClassifier():
-    def __init__(self, data_name, net_name, gpu_index, num_epochs, random_seed, algorithm_name, 
-                 data_prepare, model_prepare, data_curriculum, model_curriculum, loss_curriculum):
+class ImageClassifier:
+    def __init__(
+        self,
+        data_name,
+        net_name,
+        gpu_index,
+        num_epochs,
+        random_seed,
+        algorithm_name,
+        data_prepare,
+        model_prepare,
+        data_curriculum,
+        model_curriculum,
+        loss_curriculum,
+    ):
         self.data_name = data_name
         self.net_name = net_name
         self.gpu_index = gpu_index
@@ -28,77 +47,96 @@ class ImageClassifier():
         self._init_model(net_name, gpu_index, num_epochs)
         self._init_logger(algorithm_name, data_name, net_name, num_epochs, random_seed)
 
-
     def _init_dataloader(self, data_name):
         # standard:  'cifar10'
-        # noise:     'cifar10-noise-0.4', 
+        # noise:     'cifar10-noise-0.4',
         # imbalance: 'cifar10-imbalance-50'
-        self.dataset = get_dataset(data_name) # data format is tuple: (train, valid, test)
-        
+        self.dataset = get_dataset(
+            data_name
+        )  # data format is tuple: (train, valid, test)
+
         train_dataset, valid_dataset, test_dataset = self.dataset
         self.train_loader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=50, shuffle=True, pin_memory=True, num_workers=4)
+            train_dataset, batch_size=512, shuffle=True, pin_memory=True, num_workers=8
+        )
         self.valid_loader = torch.utils.data.DataLoader(
-            valid_dataset, batch_size=50, shuffle=False, pin_memory=True, num_workers=4)
+            valid_dataset, batch_size=512, shuffle=False, pin_memory=True, num_workers=8
+        )
         self.test_loader = torch.utils.data.DataLoader(
-            test_dataset, batch_size=50, shuffle=False, pin_memory=True, num_workers=4)
+            test_dataset, batch_size=512, shuffle=False, pin_memory=True, num_workers=8
+        )
 
-        self.data_prepare(self.train_loader)                            # curriculum part
-
+        self.data_prepare(self.train_loader)  # curriculum part
 
     def _init_model(self, net_name, gpu_index, num_epochs):
         self.net = get_net(net_name, self.dataset)
-        self.device = torch.device('cuda:%d' % (gpu_index) \
-            if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device(
+            "cuda:%d" % (gpu_index) if torch.cuda.is_available() else "cpu"
+        )
         self.net.to(self.device)
 
         self.epochs = num_epochs
-        self.criterion = torch.nn.CrossEntropyLoss(reduction='none')
+        self.criterion = torch.nn.CrossEntropyLoss(reduction="none")
         self.optimizer = torch.optim.Adam(self.net.parameters(), lr=0.0001)
-        self.lr_scheduler = torch.optim.lr_scheduler.ConstantLR(self.optimizer, factor=1.0)
+        self.lr_scheduler = torch.optim.lr_scheduler.ConstantLR(
+            self.optimizer, factor=1.0
+        )
 
-        self.model_prepare(self.net, self.device, self.epochs,          # curriculum part
-            self.criterion, self.optimizer, self.lr_scheduler)
+        self.model_prepare(
+            self.net,
+            self.device,
+            self.epochs,  # curriculum part
+            self.criterion,
+            self.optimizer,
+            self.lr_scheduler,
+        )
 
-    
-    def _init_logger(self, algorithm_name, data_name, 
-                     net_name, num_epochs, random_seed):
+    def _init_logger(
+        self, algorithm_name, data_name, net_name, num_epochs, random_seed
+    ):
         self.log_interval = 1
-        log_info = '%s-%s-%s-%d-%d' % (
-            algorithm_name, data_name, net_name, num_epochs, random_seed)
+        log_info = "%s-%s-%s-%d-%d" % (
+            algorithm_name,
+            data_name,
+            net_name,
+            num_epochs,
+            random_seed,
+        )
         self.log_dir = create_log_dir(log_info)
-        self.logger = get_logger(os.path.join(self.log_dir, 'train.log'), algorithm_name)
-
+        self.logger = get_logger(
+            os.path.join(self.log_dir, "train.log"), algorithm_name
+        )
 
     def _wandb_config(self):
-        dataset_base = self.data_name.split('-')[0]
+        dataset_base = self.data_name.split("-")[0]
         noise_p = 0.0
-        if '-noise-' in self.data_name:
+        if "-noise-" in self.data_name:
             try:
-                noise_p = float(self.data_name.split('-')[-1])
+                noise_p = float(self.data_name.split("-")[-1])
             except ValueError:
                 noise_p = None
 
         return {
-            'algorithm': self.algorithm_name,
-            'dataset': self.data_name,
-            'dataset_base': dataset_base,
-            'noise_p': noise_p,
-            'model': self.net_name,
-            'epochs': self.epochs,
-            'seed': self.random_seed,
-            'gpu_index': self.gpu_index,
-            'log_dir': self.log_dir,
+            "algorithm": self.algorithm_name,
+            "dataset": self.data_name,
+            "dataset_base": dataset_base,
+            "noise_p": noise_p,
+            "model": self.net_name,
+            "epochs": self.epochs,
+            "seed": self.random_seed,
+            "gpu_index": self.gpu_index,
+            "log_dir": self.log_dir,
         }
-
 
     def _start_wandb(self):
         init_wandb(config=self._wandb_config(), name=os.path.basename(self.log_dir))
 
-
     def _gpu_memory(self):
-        return torch.cuda.max_memory_allocated(self.device) if self.device.type == 'cuda' else 0
-        
+        return (
+            torch.cuda.max_memory_allocated(self.device)
+            if self.device.type == "cuda"
+            else 0
+        )
 
     def _train(self):
         best_acc = 0.0
@@ -109,18 +147,18 @@ class ImageClassifier():
             correct = 0
             train_loss = 0.0
 
-            loader = self.data_curriculum()                             # curriculum part
-            net = self.model_curriculum()                               # curriculum part
+            loader = self.data_curriculum()  # curriculum part
+            net = self.model_curriculum()  # curriculum part
 
             net.train()
             for data in tqdm(loader):
                 inputs = data[0].to(self.device)
                 labels = data[1].to(self.device)
                 indices = data[2].to(self.device)
-                
+
                 self.optimizer.zero_grad()
                 outputs = net(inputs)
-                loss = self.loss_curriculum(outputs, labels, indices)   # curriculum part
+                loss = self.loss_curriculum(outputs, labels, indices)  # curriculum part
                 loss.backward()
                 self.optimizer.step()
 
@@ -132,27 +170,31 @@ class ImageClassifier():
             self.lr_scheduler.step()
             train_acc = correct / total
             self.logger.info(
-                '[%3d]  Train Data = %6d  Acc = %.4f  Loss = %.4f  Time = %.2fs'
-                % (epoch + 1, total, train_acc, train_loss / total, time.time() - t))
+                "[%3d]  Train Data = %6d  Acc = %.4f  Loss = %.4f  Time = %.2fs"
+                % (epoch + 1, total, train_acc, train_loss / total, time.time() - t)
+            )
 
             if (epoch + 1) % self.log_interval == 0:
                 valid_acc = self._valid(self.valid_loader)
                 if valid_acc > best_acc:
                     best_acc = valid_acc
-                    torch.save(net.state_dict(), os.path.join(self.log_dir, 'net.pkl'))
+                    torch.save(net.state_dict(), os.path.join(self.log_dir, "net.pkl"))
                 self.logger.info(
-                    '[%3d]  Valid Data = %6d  Acc = %.4f  Best Valid Acc = %.4f' 
-                    % (epoch + 1, len(self.valid_loader.dataset), valid_acc, best_acc))
-                log_wandb({
-                    'epoch': epoch + 1,
-                    'train/loss': train_loss / total,
-                    'train/acc': train_acc,
-                    'valid/acc': valid_acc,
-                    'best/valid_acc': best_acc,
-                    'lr': self.lr_scheduler.get_last_lr()[0],
-                    'gpu/mem_allocated': self._gpu_memory(),
-                }, step=epoch + 1)
-            
+                    "[%3d]  Valid Data = %6d  Acc = %.4f  Best Valid Acc = %.4f"
+                    % (epoch + 1, len(self.valid_loader.dataset), valid_acc, best_acc)
+                )
+                log_wandb(
+                    {
+                        "epoch": epoch + 1,
+                        "train/loss": train_loss / total,
+                        "train/acc": train_acc,
+                        "valid/acc": valid_acc,
+                        "best/valid_acc": best_acc,
+                        "lr": self.lr_scheduler.get_last_lr()[0],
+                        "gpu/mem_allocated": self._gpu_memory(),
+                    },
+                    step=epoch + 1,
+                )
 
     def _valid(self, loader):
         total = 0
@@ -170,7 +212,6 @@ class ImageClassifier():
                 total += labels.shape[0]
         return correct / total
 
-
     def fit(self):
         set_random(self.random_seed)
         self._start_wandb()
@@ -179,35 +220,43 @@ class ImageClassifier():
         endtime = time.time()
         self.logger.info("Training Time = %ds" % (endtime - starttime))
         self.logger.info("Training Mem = %dB" % (self._gpu_memory()))
-        log_wandb({
-            'time/train_seconds': endtime - starttime,
-            'gpu/mem_allocated_final': self._gpu_memory(),
-        })    
-
+        log_wandb(
+            {
+                "time/train_seconds": endtime - starttime,
+                "gpu/mem_allocated_final": self._gpu_memory(),
+            }
+        )
 
     def evaluate(self, net_dir=None):
         self._start_wandb()
         self._load_best_net(net_dir)
         valid_acc = self._valid(self.valid_loader)
         test_acc = self._valid(self.test_loader)
-        self.logger.info('Valid Data = %6d  Best Valid Acc = %.4f' % (len(self.valid_loader.dataset), valid_acc))
-        self.logger.info('Test Data  = %6d  Final Test Acc = %.4f' % (len(self.test_loader.dataset), test_acc))
-        log_wandb({
-            'eval/valid_acc': valid_acc,
-            'eval/test_acc': test_acc,
-            'gpu/mem_allocated': self._gpu_memory(),
-        })
+        self.logger.info(
+            "Valid Data = %6d  Best Valid Acc = %.4f"
+            % (len(self.valid_loader.dataset), valid_acc)
+        )
+        self.logger.info(
+            "Test Data  = %6d  Final Test Acc = %.4f"
+            % (len(self.test_loader.dataset), test_acc)
+        )
+        log_wandb(
+            {
+                "eval/valid_acc": valid_acc,
+                "eval/test_acc": test_acc,
+                "gpu/mem_allocated": self._gpu_memory(),
+            }
+        )
         finish_wandb()
         return test_acc
-
 
     def export(self, net_dir=None):
         self._load_best_net(net_dir)
         return self.net
 
-
     def _load_best_net(self, net_dir):
-        if net_dir is None: net_dir = self.log_dir
-        net_file = os.path.join(net_dir, 'net.pkl')
-        assert os.path.exists(net_file), 'Assert Error: the net file does not exist'
+        if net_dir is None:
+            net_dir = self.log_dir
+        net_file = os.path.join(net_dir, "net.pkl")
+        assert os.path.exists(net_file), "Assert Error: the net file does not exist"
         self.net.load_state_dict(torch.load(net_file, map_location=self.device))

@@ -26,7 +26,9 @@ def build_data_name(noise_p: float) -> str:
     return f"cifar10-noise-{noise_p:.1f}"
 
 
-def build_run_dir(method: str, data_name: str, net: str, epochs: int, seed: int) -> Path:
+def build_run_dir(
+    method: str, data_name: str, net: str, epochs: int, seed: int
+) -> Path:
     return Path("runs") / f"{method}-{data_name}-{net}-{epochs}-{seed}"
 
 
@@ -95,8 +97,8 @@ def main() -> None:
         run_cmd(teacher_cmd, env=env, dry_run=args.dry_run)
 
     for seed in SEEDS:
-        for method in METHODS:
-            for noise_p in NOISE_PS:
+        for noise_p in NOISE_PS:
+            for method in METHODS:
                 data_name = build_data_name(noise_p)
                 run_dir = build_run_dir(method, data_name, args.net, args.epochs, seed)
                 if run_dir.exists():
