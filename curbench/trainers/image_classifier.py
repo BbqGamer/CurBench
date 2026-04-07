@@ -71,9 +71,19 @@ class ImageClassifier():
 
 
     def _wandb_config(self):
+        dataset_base = self.data_name.split('-')[0]
+        noise_p = 0.0
+        if '-noise-' in self.data_name:
+            try:
+                noise_p = float(self.data_name.split('-')[-1])
+            except ValueError:
+                noise_p = None
+
         return {
             'algorithm': self.algorithm_name,
             'dataset': self.data_name,
+            'dataset_base': dataset_base,
+            'noise_p': noise_p,
             'model': self.net_name,
             'epochs': self.epochs,
             'seed': self.random_seed,
