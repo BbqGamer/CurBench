@@ -6,17 +6,20 @@ def convert_dataset(data_name, tokenizer, dataset, max_length=128):
     def convert_with_tokenizer(batch):
         # Either encode single sentence or sentence pairs
         if len(text_fields) > 1:
-            texts_or_text_pairs = list(zip(batch[text_fields[0]], batch[text_fields[1]]))
+            features = tokenizer(
+                batch[text_fields[0]],
+                batch[text_fields[1]],
+                padding='max_length',   # fix sequence length for shuffle sample
+                truncation=True,
+                max_length=max_length,
+            )
         else:
-            texts_or_text_pairs = batch[text_fields[0]]
-        # Tokenize the text/text pairs
-        features = tokenizer.batch_encode_plus(
-            texts_or_text_pairs,
-            padding='max_length',   # fix sequence length for shuffle sample
-            truncation=True,
-            max_length=max_length,
-            return_tensors='pt',
-        )
+            features = tokenizer(
+                batch[text_fields[0]],
+                padding='max_length',   # fix sequence length for shuffle sample
+                truncation=True,
+                max_length=max_length,
+            )
         # Rename label to labels to make it easier to pass to model forward
         features['labels'] = batch['label']
         return features
