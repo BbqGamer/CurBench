@@ -22,6 +22,7 @@ dependencies = [
   "torchaudio==2.4.0",
   "torchmetrics>=1.4",
   "torch-geometric==2.7.0",
+  "wandb>=0.25.1",
 ]
 
 [tool.uv.build-backend]

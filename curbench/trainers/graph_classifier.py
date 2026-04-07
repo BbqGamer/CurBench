@@ -6,13 +6,17 @@ from tqdm import tqdm
 
 from ..datasets.graph import get_dataset, get_metric
 from ..backbones.graph import get_net
-from ..utils import set_random, create_log_dir, get_logger
+from ..utils import set_random, create_log_dir, get_logger, init_wandb, log_wandb, finish_wandb
 
 
 
 class GraphClassifier():
     def __init__(self, data_name, net_name, gpu_index, num_epochs, random_seed, algorithm_name, 
                  data_prepare, model_prepare, data_curriculum, model_curriculum, loss_curriculum):
+        self.data_name = data_name
+        self.net_name = net_name
+        self.gpu_index = gpu_index
+        self.algorithm_name = algorithm_name
         self.random_seed = random_seed
         self.data_prepare = data_prepare
         self.model_prepare = model_prepare
@@ -69,6 +73,27 @@ class GraphClassifier():
         self.logger = get_logger(os.path.join(self.log_dir, 'train.log'), algorithm_name)
 
 
+    def _wandb_config(self):
+        return {
+            'algorithm': self.algorithm_name,
+            'dataset': self.data_name,
+            'model': self.net_name,
+            'epochs': self.epochs,
+            'seed': self.random_seed,
+            'gpu_index': self.gpu_index,
+            'log_dir': self.log_dir,
+            'metric_name': self.metric_name,
+        }
+
+
+    def _start_wandb(self):
+        init_wandb(config=self._wandb_config(), name=os.path.basename(self.log_dir))
+
+
+    def _gpu_memory(self):
+        return torch.cuda.max_memory_allocated(self.device) if self.device.type == 'cuda' else 0
+
+
     def _train(self):
         best_metric = 0.0
         for epoch in range(self.epochs):
@@ -114,6 +139,15 @@ class GraphClassifier():
                 self.logger.info(
                     '[%3d]  Valid Data = %6d  Valid %s = %.4f  Best Valid %s = %.4f' 
                     % (epoch + 1, len(self.valid_loader.dataset), self.metric_name, valid_metric, self.metric_name, best_metric))
+                log_wandb({
+                    'epoch': epoch + 1,
+                    'train/loss': train_loss / total,
+                    f'train/{self.metric_name}': train_metric,
+                    f'valid/{self.metric_name}': valid_metric,
+                    f'best/valid_{self.metric_name}': best_metric,
+                    'lr': self.lr_scheduler.get_last_lr()[0],
+                    'gpu/mem_allocated': self._gpu_memory(),
+                }, step=epoch + 1)
 
 
     def _valid(self, loader):
@@ -135,19 +169,31 @@ class GraphClassifier():
 
     def fit(self):
         set_random(self.random_seed)
+        self._start_wandb()
         starttime = time.time()
         self._train()
         endtime = time.time()
         self.logger.info("Training Time = %ds" % (endtime - starttime))
-        self.logger.info("Training Mem  = %dB" % (torch.cuda.max_memory_allocated(self.device)))   
+        self.logger.info("Training Mem  = %dB" % (self._gpu_memory()))
+        log_wandb({
+            'time/train_seconds': endtime - starttime,
+            'gpu/mem_allocated_final': self._gpu_memory(),
+        })
 
 
     def evaluate(self, net_dir=None):
+        self._start_wandb()
         self._load_best_net(net_dir)
         valid_metric = self._valid(self.valid_loader)
         test_metric = self._valid(self.test_loader)
         self.logger.info('Valid Data = %6d  Best Valid %s = %.4f' % (len(self.valid_loader.dataset), self.metric_name, valid_metric))
         self.logger.info('Test Data  = %6d  Final Test %s = %.4f' % (len(self.test_loader.dataset), self.metric_name, test_metric))
+        log_wandb({
+            'eval/valid_metric': valid_metric,
+            'eval/test_metric': test_metric,
+            'gpu/mem_allocated': self._gpu_memory(),
+        })
+        finish_wandb()
         return test_metric
 
 
