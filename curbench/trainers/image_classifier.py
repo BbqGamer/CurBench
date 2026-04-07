@@ -57,13 +57,25 @@ class ImageClassifier:
 
         train_dataset, valid_dataset, test_dataset = self.dataset
         self.train_loader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=512, shuffle=True, pin_memory=True, num_workers=8
+            train_dataset,
+            batch_size=512,
+            shuffle=True,
+            pin_memory=True,
+            num_workers=16,
+            persistent_workers=True,
+            prefetch_factor=4,
         )
         self.valid_loader = torch.utils.data.DataLoader(
-            valid_dataset, batch_size=512, shuffle=False, pin_memory=True, num_workers=8
+            valid_dataset,
+            batch_size=512,
+            shuffle=False,
+            pin_memory=True,
+            num_workers=16,
+            persistent_workers=True,
+            prefetch_factor=4,
         )
         self.test_loader = torch.utils.data.DataLoader(
-            test_dataset, batch_size=512, shuffle=False, pin_memory=True, num_workers=8
+            test_dataset, batch_size=512, shuffle=False, pin_memory=True, num_workers=4
         )
 
         self.data_prepare(self.train_loader)  # curriculum part
